@@ -26,7 +26,7 @@ class BarcodeProcessor:
         self.alt_config_file = self.subconf_path('operation')
 
         self._format_map = {
-            'never': '',
+            'never': 'ALL',
             'yearly': '%Y%m',
             'monthly': '%Y%m',
             'daily': '%Y%m%d',
