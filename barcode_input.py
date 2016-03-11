@@ -2,6 +2,7 @@ import ConfigParser
 import re
 import time
 import os
+import custom_parser
 
 class InvalidInput(Exception):
     def __init__(self, data, message):
@@ -12,10 +13,18 @@ class ReservedInput(InvalidInput):
     pass
 
 class BarcodeProcessor:
-    def __init__(self, config_file):
-        self._config_file = config_file
-        self._config_dir = os.path.dirname(config_file)
-        self._read_config()
+    def __init__(self, master_config):
+        self._master_config = master_config
+        self.output_rot = master_config.get('output', 'rotation')
+        self.output_ext = master_config.get('output', 'extension')
+        self.output_dir = master_config.get('output', 'directory')
+
+        self._config_dir = master_config.get('general', 'mountpoint')
+
+        self.map_config_file = self.subconf_path('mapping')
+        self.general_config_file = self.subconf_path('general')
+        self.alt_config_file = self.subconf_path('operation')
+
         self._format_map = {
             'never': '',
             'yearly': '%Y%m',
@@ -24,9 +33,23 @@ class BarcodeProcessor:
             'hourly': '%Y%m%d%H'
         }
 
-    def process(self, barcode):
-        self._validate_barcode(barcode)
+    def subconf_path(self, subconf):
+      return os.path.join(
+          self._config_dir,
+          self._master_config.get('config', subconf)
+      )
 
+    def process(self, barcode):
+        if not self._validate_barcode(barcode):
+            return self._process_invalid_input(barcode)
+        elif barcode[0] in ('1', '2'):
+            return self._process_regular_input(barcode)
+        elif barcode[0] in ('7', '8', '9'):
+            return self._process_special_input(barcode)
+        else:
+            return self._process_reserved_input(barcode)
+
+    def _process_regular_input(self, barcode):
         self._read_config()
         self._timestamp = time.localtime()
 
@@ -36,36 +59,50 @@ class BarcodeProcessor:
         with open(output_file, 'a') as f:
             f.write(line)
 
-        return line
+        return "(%s) %s" % (self.worker, line)
+
+    def _process_invalid_input(self, barcode):
+        return self._master_config.get('errors', 'invalid')
+
+    def _process_reserved_input(self, barcode):
+        return self._master_config.get('errors', 'reserved')
+
+    def _process_special_input(self, barcode):
+        self._read_config()
+        if barcode[0] == '7':
+            new_value = ('TERMINAL', barcode[-3:])
+        elif barcode[0] == '8':
+            new_value = ('OPERATION', barcode[-2:])
+        elif barcode[0] == '9':
+            new_value = ('TERMINAL', barcode[-3:])
+
+        self.general_config.set('ids', *new_value)
+        with open(self.general_config_file, 'w') as f:
+            self.general_config.write(f)
+
+        return 'Configure: %s' % str(new_value)
 
     def _validate_barcode(self, barcode):
         pattern = r'^(\d)\d{11}$'
         match_data = re.match(pattern, barcode)
-
-        if not match_data:
-            raise InvalidInput(barcode, "INVALID DATA")
-        elif match_data.group(1) in ('0', '3', '4', '5', '6'):
-            msg = self._config.get('errors', 'reserved_%s' % match_data.group(1))
-            raise ReservedInput(barcode, msg)
-
         return re.match(pattern, barcode)
 
     def _read_config(self):
-        ini = ConfigParser.ConfigParser()
-        ini.read(self._config_file)
+        self.map_config = ConfigParser.ConfigParser()
+        self.map_config.read(self.map_config_file)
 
-        self.output_rot = ini.get('output', 'rotation')
-        self.output_ext = ini.get('output', 'extension')
-        self.output_dir = ini.get('output', 'directory')
+        self.general_config = ConfigParser.ConfigParser()
+        self.general_config.read(self.general_config_file)
 
-        map_config = CustomParser(ini.get('general', 'mapfile'))
-        id_config = CustomParser(ini.get('general', 'idfile'))
+        self.alt_config = ConfigParser.ConfigParser()
+        self.alt_config.read(self.alt_config_file)
 
-        self.tid = id_config['TERMINAL_ID']
-        self.oid = id_config['OPERATION_ID']
-        self.wid = id_config['WORKER_ID']
+        self.tid = self.general_config.get('ids', 'TERMINAL')
+        self.oid = self.general_config.get('ids', 'OPERATION')
+        self.wid = self.general_config.get('ids', 'WORKER')
+        self.worker = self.map_config.get('names', str(self.wid), 'UNKNOWN-%s' % self.wid)
+        self.alt_oid = self.alt_config.get('ids', 'OPERATION')
 
-        self.worker = map_config.get(self.wid)
 
     def _build_filename(self):
         timestamp = time.strftime(self._format_map[self.output_rot], self._timestamp)
@@ -79,13 +116,10 @@ class BarcodeProcessor:
         return fullname
 
     def _build_line(self, barcode):
-        # TODO:
-        # if barcode[1:3] == '00':
-        #     oid = read_opfile()     # use operation_id from CONFIG08.TXT
-        # else:
-        #     oid = self.oid          # use operation_id from CONFIG.TXT
-
-        oid = self.oid
+        if barcode[1:3] == '00':
+            oid = self.alt_oid      # use operation_id from CONFIG08.TXT
+        else:
+            oid = self.oid          # use operation_id from CONFIG.TXT
 
         fields = [
             barcode,
@@ -99,17 +133,15 @@ class BarcodeProcessor:
 
         return ';'.join(fields)
 
-
 def main():
-    config_file = 'config.ini'
+  master_config = ConfigParser.ConfigParser()
+  master_config.read('config.ini')
 
-    while True:
-        try:
-            data = raw_input()
-            processor = BarcodeProcessor(config_file)
-            print 'Wrote: %s' % processor.process(data)
-        except InvalidInput as ex:
-            print ex.message + '\n'
+  while True:
+      data = raw_input()
+      processor = BarcodeProcessor(master_config)
+      res = processor.process(data)
+      print res
 
 
 if __name__ == '__main__':

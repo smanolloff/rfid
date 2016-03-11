@@ -1,0 +1,29 @@
+;
+; all variable names are case insensitive
+; `rotation` possible values: horly, daily, monthly, yearly, never
+; `directory` may be absolute or relative to the current dir and must exist
+; `alphabet` is a string of characters to be used when generating file name
+; `relative_to` possible values: 
+;
+; For MS-DOS/Windows compatibility, don't use mixed case letters
+;
+
+[general]
+disk = /dev/sda1
+mountpoint = /users/Simo/Projects/mdc/party/mount
+
+[config]
+mapping = config/MAP.ini
+general = config/CONFIG.ini
+display = config/DISPL.txt
+operation = config/CONFIG08.ini
+
+[output]
+directory = output
+separator = ;
+extension = txt
+rotation = daily
+
+[errors]
+invalid = INVALID DATA
+reserved = RESERVED BARCODE
