@@ -2,7 +2,7 @@ import ConfigParser
 import re
 import time
 import os
-import custom_parser
+
 
 class InvalidInput(Exception):
     def __init__(self, data, message):
