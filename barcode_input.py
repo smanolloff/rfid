@@ -140,3 +140,16 @@ class BarcodeProcessor:
         ]
 
         return ';'.join(fields)
+
+def main():
+  master_config = ConfigParser.ConfigParser()
+  master_config.read('config.ini')
+
+  while True:
+      data = raw_input()
+      processor = BarcodeProcessor(master_config)
+      res = processor.process(data)
+      print res
+
+if __name__ == '__main__':
+    main()
