@@ -59,7 +59,7 @@ class BarcodeProcessor:
         with open(output_file, 'a') as f:
             f.write(line)
 
-        return "(%s) %s" % (self.worker, line)
+        return "[%s] %s - %s" % (self.worker, self.operation, line)
 
     def _process_invalid_input(self, barcode):
         return self._master_config.get('errors', 'invalid')
@@ -70,11 +70,11 @@ class BarcodeProcessor:
     def _process_special_input(self, barcode):
         self._read_config()
         if barcode[0] == '7':
-            new_value = ('TERMINAL', barcode[-3:])
+            new_value = ('terminal', barcode[-3:])
         elif barcode[0] == '8':
-            new_value = ('OPERATION', barcode[-2:])
+            new_value = ('operation', barcode[-2:])
         elif barcode[0] == '9':
-            new_value = ('TERMINAL', barcode[-3:])
+            new_value = ('worker', barcode[-3:])
 
         self.general_config.set('ids', *new_value)
         with open(self.general_config_file, 'w') as f:
@@ -97,12 +97,20 @@ class BarcodeProcessor:
         self.alt_config = ConfigParser.ConfigParser()
         self.alt_config.read(self.alt_config_file)
 
-        self.tid = self.general_config.get('ids', 'TERMINAL')
-        self.oid = self.general_config.get('ids', 'OPERATION')
-        self.wid = self.general_config.get('ids', 'WORKER')
-        self.worker = self.map_config.get('names', str(self.wid), 'UNKNOWN-%s' % self.wid)
-        self.alt_oid = self.alt_config.get('ids', 'OPERATION')
+        self.tid = self.general_config.get('ids', 'terminal')
+        self.oid = self.general_config.get('ids', 'operation')
+        self.wid = self.general_config.get('ids', 'worker')
+        self.alt_oid = self.alt_config.get('ids', 'operation')
 
+        try:
+            self.worker = self.map_config.get('workers', str(self.wid))
+        except ConfigParser.NoOptionError, e:
+            self.worker = 'XXX-%s' % self.wid
+
+        try:
+            self.operation = self.map_config.get('operations', str(self.oid))
+        except ConfigParser.NoOptionError, e:
+            self.operation = 'XX-%s' % self.oid
 
     def _build_filename(self):
         timestamp = time.strftime(self._format_map[self.output_rot], self._timestamp)
@@ -132,17 +140,3 @@ class BarcodeProcessor:
         ]
 
         return ';'.join(fields)
-
-def main():
-  master_config = ConfigParser.ConfigParser()
-  master_config.read('config.ini')
-
-  while True:
-      data = raw_input()
-      processor = BarcodeProcessor(master_config)
-      res = processor.process(data)
-      print res
-
-
-if __name__ == '__main__':
-    main()

@@ -23,7 +23,7 @@ run_program() {
 
 remount_disk() {
   sudo umount $DISK $MOUNTPOINT 2>/dev/null || :
-  sudo mount $DISK $MOUNTPOINT || :
+  sudo mount $DISK $MOUNTPOINT -t vfat -o auto,rw,user,umask=000
 }
 
 while true; do
@@ -46,7 +46,8 @@ while true; do
   clear
 
   if ! run_program; then
-    echo "Error: program terminated with $?"
+    echo "Error: abrupt program exit"
+    # TODO: flush stdin
     sleep 10
   fi
 done
