@@ -362,7 +362,7 @@ def update_values(ident):
     target = None
 
     if ident == 'terminal':
-        original_style = 'dark_gray_on_black'
+        original_style = 'light_red_on_black'
         target = terminal_widget
         new_value = "ТЕРМИНАЛ:%s" % processor.tid
     elif ident == 'operation':

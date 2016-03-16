@@ -5,25 +5,17 @@ import os
 import pdb
 
 class BarcodeProcessor:
-    FORMAT_MAP = {
-        'never': 'ALL',
-        'yearly': '%Y%m',
-        'monthly': '%Y%m',
-        'daily': '%Y%m%d',
-        'hourly': '%Y%m%d%H'
-    }
-
     def __init__(self, master_config):
         self._master_config = master_config
         self.output_rot = master_config.get('output', 'rotation')
         self.output_ext = master_config.get('output', 'extension')
         self.output_dir = master_config.get('output', 'directory')
-
         self._config_dir = master_config.get('general', 'mountpoint')
 
         self.map_config_file = self.subconf_path('mapping')
         self.general_config_file = self.subconf_path('general')
         self.alt_config_file = self.subconf_path('operation')
+        self._file_timestamp = time.localtime()
         self._read_config()
 
     def subconf_path(self, subconf):
@@ -45,11 +37,10 @@ class BarcodeProcessor:
     def _process_regular_input(self, barcode):
         self._read_config()
         self._timestamp = time.localtime()
-
-        output_file = self._build_filename()
         line = self._build_line(barcode)
+        file = self._build_filename()
 
-        with open(output_file, 'a') as f:
+        with open(file, 'a') as f:
             f.write(line)
 
         return ('normal', line)
@@ -107,14 +98,19 @@ class BarcodeProcessor:
         except ConfigParser.NoOptionError, e:
             self.operation = ''
 
-    def _build_filename(self):
-        timestamp = time.strftime(BarcodeProcessor.FORMAT_MAP[self.output_rot], self._timestamp)
-        basename = '%s-%s.%s' % (self.tid, timestamp, self.output_ext)
+    def _build_filename(self, recursive=False):
+        formatted_time = time.strftime('%s', self._file_timestamp)
+        basename = '%s-%s.%s' % (self.tid, formatted_time, self.output_ext)
 
         if os.path.isabs(self.output_dir):
             fullname = os.path.join(self.output_dir, basename)
         else:
             fullname = os.path.join(self._config_dir, self.output_dir, basename)
+
+        if not recursive and not os.access(fullname, os.W_OK):
+            self._file_timestamp = self._timestamp
+            fullname = self._build_filename(True)
+
 
         return fullname
 
