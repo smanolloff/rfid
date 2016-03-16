@@ -13,6 +13,14 @@ flush_stdin() {
   while read -t 1 -n 10000 _; do :; done
 }
 
+dotsleep() {
+  local i=$1
+  while let i--; do
+    echo -n .
+    sleep 1
+  done
+}
+
 read_config() {
   DISK=$(awk -F "=" '/disk/ {print $2}' $CONFIG | sed 's/\r$//')
   MOUNTPOINT=$(awk -F "=" '/mountpoint/ {print $2}' $CONFIG | sed 's/\r$//')
@@ -25,14 +33,33 @@ run_program() {
   python $DIR/$PROGRAM
 }
 
+reset_usb() {
+  local port
+  local dev
+
+  port=$(sudo lsusb -t | grep usb-storage | grep -Eo 'Port [0-9]+' | awk '{print $2}')
+
+  if [ -n "$port" ]; then
+    # Assume root hub is always enumerated at Bus1-Port1
+    dev=/sys/bus/usb/devices/1-1.$port/authorized
+
+    sudo sh -c "echo 0 > $dev"
+    dotsleep 1
+    sudo sh -c "echo 1 > $dev"
+    dotsleep 1
+  fi
+}
+
 remount_disk() {
+  reset_usb || :
   sudo umount $DISK $MOUNTPOINT 2>/dev/null || :
+  dotsleep 1
   sudo mount $DISK $MOUNTPOINT -t vfat -o auto,rw,user,umask=000
+  dotsleep 1
 }
 
 while true; do
-  echo -n 'RFID starting.'
-  for i in $(seq 1 1); do sleep 1 && echo -n '.'; done
+  echo -n 'RFID starting'
 
   if ! read_config; then
     echo "ERROR: Could not read config from $CONFIG"
@@ -52,6 +79,5 @@ while true; do
 
   if ! run_program; then
     echo "Error: abrupt program exit"
-    sleep 5
   fi
 done
