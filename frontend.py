@@ -122,8 +122,8 @@ map1 = urwid.AttrMap(box, 'streak')
 fill = urwid.Filler(map1, valign='top', top=2)
 map2 = urwid.AttrMap(fill, 'bg')
 
-def text(txt, style=None):
-    txt = urwid.Text(txt, align='center', wrap='any')
+def text(txt, style=None, align='center'):
+    txt = urwid.Text(txt, align=align, wrap='clip')
     if style:
         txt = urwid.AttrMap(txt, style)
     return txt
@@ -376,7 +376,7 @@ def update_values(ident):
     else:
         return
 
-    target.base_widget.set_text(new_value)
+    target.base_widget.set_text(new_value.strip())
 
     main_loop.set_alarm_in(0, set_attr_map, (target, {None: 'yellow_on_blue'}))
     main_loop.set_alarm_in(1, set_attr_map, (target, {None: original_style}))
