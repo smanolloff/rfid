@@ -15,7 +15,6 @@ master_config.read('config.ini')
 processor = BarcodeProcessor(master_config)
 out_delay = float(master_config.get('timers', 'barcode_status'))
 msg_refresh = float(master_config.get('timers', 'message_refresh'))
-msg_scroll = float(master_config.get('timers', 'message_scroll'))
 msg_file = processor.subconf_path('message')
 
 # 16 Standard Foreground Colors
@@ -232,8 +231,8 @@ mid_table = urwid.Pile([
 
 
 txt = '...'
-# txt = '''Lorem ipsum dolor sit amet, no assum facilisi argumentum his, ius eu vocibus reprehendunt. Et nec vitae indoctum voluptatum, cu duo nihil impedit disputationi. Civibus postulant efficiendi ad nec. Sed labores maluisset elaboraret cu, nemore fierent mediocrem id quo. Id iuvaret feugiat expetenda ius, discere salutatus deterruisset qui at. Exerci inermis ius in, sumo veri referrentur ius an. Vis tantas recusabo et, eu vivendo pertinax has, ut sed idque everti.'''
 msg_widget = urwid.Filler(urwid.Text(txt, align='center'), valign='middle', height='pack')
+msg_widget = urwid.AttrMap(msg_widget, 'gray_on_black')
 
 
 ##############################################################################
@@ -283,7 +282,8 @@ bot_output = urwid.Padding(output_field, left=1, right=1)
 
 bot_row = urwid.Columns([
   (14, bot_input),
-  ('weight', 64, bot_output)
+  (1, text(u'\N{BOX DRAWINGS LIGHT VERTICAL}', col_sep_style)),
+  ('weight', 63, bot_output)
 ])
 
 
@@ -346,7 +346,7 @@ def normalize_message(message):
     return res
 
 def build_message(result, data):
-    if result == 'normal':      msg = 'ОК: %s' % str(data)
+    if result == 'normal':      msg = 'ОК'
     elif result == 'invalid':   msg = 'НЕВАЛИДЕН БАРКОД'
     elif result == 'reserved':  msg = 'РЕЗЕРВИРАН БАРКОД'
     elif result == 'configure': msg = 'СПЕЦИАЛЕН БАРКОД'
@@ -449,12 +449,16 @@ def update_clock(loop, (period, date_widget, time_widget)):
     loop.set_alarm_in(period, update_clock, (period, date_widget, time_widget))
 
 def update_message(loop, (period, msg_widget, last_modified)):
-    now_modified = os.stat(msg_file).st_mtime
-    if now_modified > last_modified:
-        with open(msg_file, 'rU') as f:
-            text = f.read()
+    try:
+        now_modified = os.stat(msg_file).st_mtime
+        if now_modified > last_modified:
+            with open(msg_file, 'rU') as f:
+                text = f.read()
 
-        msg_widget.base_widget.set_text(text)
+            msg_widget.base_widget.set_text(text)
+    except IOError, OSError:
+        now_modified = last_modified
+        msg_widget.base_widget.set_text('X')
 
     loop.set_alarm_in(period, update_message, (period, msg_widget, now_modified))
 
