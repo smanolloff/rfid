@@ -1,12 +1,16 @@
 #!/bin/bash -e
 
 DIR=$(dirname $0)
-PROGRAM=barcode_input.py
+PROGRAM=frontend.py
 CONFIG=$DIR/config.ini
 
 fail() {
   echo "ERROR: $1"
   exit 1
+}
+
+flush_stdin() {
+  while read -t 1 -n 10000 _; do :; done
 }
 
 read_config() {
@@ -43,11 +47,11 @@ while true; do
     continue
   fi
 
+  flush_stdin
   clear
 
   if ! run_program; then
     echo "Error: abrupt program exit"
-    # TODO: flush stdin
-    sleep 10
+    sleep 5
   fi
 done

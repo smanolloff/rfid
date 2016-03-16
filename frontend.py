@@ -5,6 +5,18 @@ import pdb
 import urwid
 import time
 import re
+import ConfigParser
+import os
+from backend import BarcodeProcessor
+
+global master_config
+master_config = ConfigParser.ConfigParser()
+master_config.read('config.ini')
+processor = BarcodeProcessor(master_config)
+out_delay = float(master_config.get('timers', 'barcode_status'))
+msg_refresh = float(master_config.get('timers', 'message_refresh'))
+msg_scroll = float(master_config.get('timers', 'message_scroll'))
+msg_file = processor.subconf_path('message')
 
 # 16 Standard Foreground Colors
 #
@@ -43,18 +55,66 @@ import re
 # 'standout'      -- most supported
 #
 
+PROCESSING_STYLES = {
+  'normal':   ('black_on_green', 'green_on_black'),
+  'invalid':  ('white_on_red', 'red_on_black'),
+  'reserved': ('black_on_yellow', 'yellow_on_black'),
+  'configure':  ('white_on_blue', 'blue_on_black'),
+  'other':    ('black_on_white', 'white_on_black')
+}
+
 
 palette = [
-    ('body',        'light gray', 'black'),
-    ('outline',     'light gray', 'black'),
-    ('clock',       'light blue', 'black'),
-    ('title',       'light gray', 'black'),
-    ('div',         'dark gray',  'black'),
-    ('normal',      'light gray', 'black'),
-    ('error',       'white',      'dark red'),
-    ('processing',  'black',      'yellow'),
-    ('success',     'black',      'dark green'),
-    ('pending',     'yellow',     'black'),
+    ('body',            'white', 'black'),
+    ('outline',         'white', 'black'),
+    ('clock',           'yellow', 'black'),
+    ('title',           'white,bold', 'black'),
+    ('div',             'dark gray',  'black'),
+    ('normal',          'white', 'black'),
+
+    # Soft coloring
+    ('white_on_black',  'white',      'black'),
+    ('yellow_on_black', 'yellow',     'black'),
+    ('red_on_black',    'dark red',   'black'),
+    ('green_on_black',  'dark green', 'black'),
+    ('blue_on_black',   'light blue', 'black'),
+    ('gray_on_black',   'light gray', 'black'),
+    ('black_on_white',  'black',      'white'),
+    ('magenta_on_black',  'light magenta',      'black'),
+
+    ('dark_gray_on_black',   'dark gray', 'black'),
+    ('red_on_blue',          'light red',   'dark blue'),
+    ('yellow_on_blue',       'yellow',     'dark blue'),
+    ('light_red_on_black',   'light red',   'black'),
+
+
+    # Soft + bold
+    ('b_white_on_black',  'white,bold',      'black'),
+    ('b_yellow_on_black', 'yellow,bold',     'black'),
+    ('b_red_on_black',    'dark red,bold',   'black'),
+    ('b_green_on_black',  'dark green,bold', 'black'),
+    ('b_blue_on_black',   'light blue,bold', 'black'),
+    ('b_gray_on_black',   'light gray,bold', 'black'),
+    ('b_black_on_white',  'black,bold',      'white'),
+
+    # Soft + underline (NOTE: not widely supported)
+    ('u_white_on_black',  'white,underline',      'black'),
+    ('u_yellow_on_black', 'yellow,underline',     'black'),
+    ('u_red_on_black',    'dark red,underline',   'black'),
+    ('u_green_on_black',  'dark green,underline', 'black'),
+    ('u_blue_on_black',   'light blue,underline', 'black'),
+    ('u_gray_on_black',   'light gray,underline', 'black'),
+    ('u_black_on_white',  'black,underline',      'white'),
+
+    # Heavy coloring
+    ('black_on_white',  'black',      'white'),
+    ('black_on_yellow', 'black',      'yellow'),
+    ('white_on_red',    'white',      'dark red'),
+    ('black_on_green',  'black',      'dark green'),
+    ('white_on_blue',   'white',      'dark blue'),
+    ('white_on_gray',   'white',      'dark gray'),
+    ('black_on_gray',   'black',      'light gray'),
+
 ]
 
 txt = urwid.Text(('banner', u" Hello World "), align='center')
@@ -79,10 +139,13 @@ header = urwid.Text(u'МЕХАНИЧЕН ДИЗАЙН И КОНСТРУКЦИИ 
 # TOP                                                                        #
 ##############################################################################
 now = time.localtime()
-date_widget = text('...', 'clock')
-time_widget = text('...', 'clock')
-title_widget = text(u'СИСТЕМА ЗА УПРАВЛЕНИЕ НА ПРОИЗВОДСТВОТО - КОМАНДИР.НЕТ', 'title')
+date_widget = text('...', 'magenta_on_black')
+time_widget = text('...', 'magenta_on_black')
+title_widget = text(u'СИСТЕМА ЗА УПРАВЛЕНИЕ НА ПРОИЗВОДСТВОТО - КОМАНДИР.НЕТ', 'b_white_on_black')
 
+terminal_widget = text(u'...', 'red_on_black')
+operation_widget = text(u'...', 'yellow_on_black')
+worker_widget = text(u'...', 'red_on_black')
 
 top_line1 = urwid.Columns([
   ('weight', 12, date_widget),
@@ -90,36 +153,68 @@ top_line1 = urwid.Columns([
   ('weight', 10, time_widget)
 ])
 
+# top_line2 = urwid.Columns([
+#   ('weight', 14, terminal_widget),
+#   ('weight', 36, operation_widget),
+#   ('weight', 26, worker_widget)
+# ], dividechars=1)
+
 top_line2 = urwid.Columns([
-  ('weight', 14, text(u'ТЕРМИНАЛ:123')),
-  ('weight', 36, text(u'ОПЕРАЦИЯ:10 ОПЕРАЦИИ ПРЕДИ ОГЪВАНЕ')),
-  ('weight', 26, text(u'РАБОТНИК:123 КОСТАДИН К.'))
+  ('weight', 14, terminal_widget),
+  ('weight', 36, operation_widget),
+  ('weight', 26, worker_widget)
 ], dividechars=1)
 
 
 ##############################################################################
 # MIDDLE                                                                        #
 ##############################################################################
+col_style = 'gray_on_black'
+col_head_style = 'b_gray_on_black'
+col_sep_style = 'dark_gray_on_black'
+
 mid_tablehead = urwid.Columns([
-  ('weight', 2, text(u'No')),
-  ('weight', 8, text(u'ПОРЪЧКА')),
-  ('weight', 16, text(u'КЛИЕНТ')),
-  ('weight', 16, text(u'ИЗДЕЛИЕ')),
-  ('weight', 21, text(u'ОЗНАЧЕНИЕ')),
-  ('weight', 4, text(u'КОЛ.')),
-  ('weight', 5, text(u'ПАПКА')),
-], dividechars=1)
+  ('weight', 2, text(u'No', col_head_style)),
+  ('weight', 1, text(u'\N{BOX DRAWINGS LIGHT VERTICAL}', col_sep_style)),
+  ('weight', 8, text(u'ПОРЪЧКА', col_head_style)),
+  ('weight', 1, text(u'\N{BOX DRAWINGS LIGHT VERTICAL}', col_sep_style)),
+  ('weight', 16, text(u'КЛИЕНТ', col_head_style)),
+  ('weight', 1, text(u'\N{BOX DRAWINGS LIGHT VERTICAL}', col_sep_style)),
+  ('weight', 16, text(u'ИЗДЕЛИЕ', col_head_style)),
+  ('weight', 1, text(u'\N{BOX DRAWINGS LIGHT VERTICAL}', col_sep_style)),
+  ('weight', 21, text(u'ОЗНАЧЕНИЕ', col_head_style)),
+  ('weight', 1, text(u'\N{BOX DRAWINGS LIGHT VERTICAL}', col_sep_style)),
+  ('weight', 4, text(u'КОЛ.', col_head_style)),
+  ('weight', 1, text(u'\N{BOX DRAWINGS LIGHT VERTICAL}', col_sep_style)),
+  ('weight', 5, text(u'ПАПКА', col_head_style)),
+], dividechars=0)
 
 mid_tablerow = urwid.Columns([
-  ('weight', 2, text('01')),
-  ('weight', 8, text('16.03.45')),
-  ('weight', 16, text(u'ЛОРЕН НЕТУЪРКС')),
-  ('weight', 16, text('')),
-  ('weight', 21, text('')),
-  ('weight', 4, text('1000')),
-  ('weight', 5, text('')),
-], dividechars=1)
+  ('weight', 2, text('...', col_style)),
+  ('weight', 1, text(u'\N{BOX DRAWINGS LIGHT VERTICAL}', col_sep_style)),
+  ('weight', 8, text('...', col_style)),
+  ('weight', 1, text(u'\N{BOX DRAWINGS LIGHT VERTICAL}', col_sep_style)),
+  ('weight', 16, text(u'...', col_style)),
+  ('weight', 1, text(u'\N{BOX DRAWINGS LIGHT VERTICAL}', col_sep_style)),
+  ('weight', 16, text('...', col_style)),
+  ('weight', 1, text(u'\N{BOX DRAWINGS LIGHT VERTICAL}', col_sep_style)),
+  ('weight', 21, text('...', col_style)),
+  ('weight', 1, text(u'\N{BOX DRAWINGS LIGHT VERTICAL}', col_sep_style)),
+  ('weight', 4, text('...', col_style)),
+  ('weight', 1, text(u'\N{BOX DRAWINGS LIGHT VERTICAL}', col_sep_style)),
+  ('weight', 5, text('...', col_style)),
+], dividechars=0)
 
+
+# mid_tablerow = urwid.Columns([
+#   ('weight', 2, text('', 'white_on_black')),
+#   ('weight', 8, text('', 'gray_on_black')),
+#   ('weight', 16, text('', 'white_on_black')),
+#   ('weight', 16, text('', 'gray_on_black')),
+#   ('weight', 21, text('', 'white_on_black')),
+#   ('weight', 4, text('', 'gray_on_black')),
+#   ('weight', 5, text('', 'white_on_black')),
+# ], dividechars=1)
 
 mid_table = urwid.Pile([
   (1, urwid.Filler(mid_tablehead)),
@@ -136,8 +231,9 @@ mid_table = urwid.Pile([
 ])
 
 
-txt = '''Lorem ipsum dolor sit amet, no assum facilisi argumentum his, ius eu vocibus reprehendunt. Et nec vitae indoctum voluptatum, cu duo nihil impedit disputationi. Civibus postulant efficiendi ad nec. Sed labores maluisset elaboraret cu, nemore fierent mediocrem id quo. Id iuvaret feugiat expetenda ius, discere salutatus deterruisset qui at. Exerci inermis ius in, sumo veri referrentur ius an. Vis tantas recusabo et, eu vivendo pertinax has, ut sed idque everti.'''
-mid_text = urwid.Filler(urwid.Text(txt), valign='top', height='pack')
+txt = '...'
+# txt = '''Lorem ipsum dolor sit amet, no assum facilisi argumentum his, ius eu vocibus reprehendunt. Et nec vitae indoctum voluptatum, cu duo nihil impedit disputationi. Civibus postulant efficiendi ad nec. Sed labores maluisset elaboraret cu, nemore fierent mediocrem id quo. Id iuvaret feugiat expetenda ius, discere salutatus deterruisset qui at. Exerci inermis ius in, sumo veri referrentur ius an. Vis tantas recusabo et, eu vivendo pertinax has, ut sed idque everti.'''
+msg_widget = urwid.Filler(urwid.Text(txt, align='center'), valign='middle', height='pack')
 
 
 ##############################################################################
@@ -149,6 +245,9 @@ input_field = urwid.Text(u'', align='center')
 # input_field = urwid.Edit(u'', align='center')
 input_field = urwid.AttrMap(input_field, 'normal')
 
+output_field = urwid.Text(u'', align='center')
+output_field = urwid.AttrMap(output_field, 'normal')
+
 ##############################################################################
 # ALL                                                                        #
 ##############################################################################
@@ -156,7 +255,7 @@ input_field = urwid.AttrMap(input_field, 'normal')
 # pile = urwid.Pile([
 #   ('pack', top_grid),
 #   ('weight',12, urwid.LineBox(mid_pile)),
-#   ('weight',12, urwid.LineBox(mid_text)),
+#   ('weight',12, urwid.LineBox(msg_widget)),
 #   ('pack', bot_field)
 # ])
 
@@ -165,24 +264,35 @@ div = urwid.AttrMap(div, 'div')
 blankdiv = urwid.Divider(u' ')
 bpile = urwid.Pile([])
 pile = urwid.AttrMap(bpile, 'body')
+msg_container = urwid.Padding(msg_widget, left=1, right=1)
 
 # pile.contents.append((urwid.Padding(div, left=20, right=20), ('pack', None)))
 bpile.contents.append((blankdiv, ('pack', None)))
 bpile.contents.append((top_line1, ('pack', None)))
-bpile.contents.append((div, ('pack', None)))
+bpile.contents.append((blankdiv, ('pack', None)))
 bpile.contents.append((top_line2, ('pack', None)))
 bpile.contents.append((div, ('pack', None)))
 bpile.contents.append((mid_table, ('pack', None)))
 bpile.contents.append((div, ('pack', None)))
-bpile.contents.append((urwid.Padding(mid_text, left=1, right=1), ('weight', 1)))
+bpile.contents.append((msg_container, ('weight', 1)))
 bpile.contents.append((div, ('pack', None)))
 # bpile.contents.append((input_field, ('pack', None)))
 
-bot_field = urwid.Padding(input_field, left=1, right=1)
-# bot_field = urwid.AttrMap('normal', bot_field)
-bpile.contents.append((bot_field, ('pack', None)))
+bot_input = urwid.Padding(input_field, left=1, right=1)
+bot_output = urwid.Padding(output_field, left=1, right=1)
 
-bpile.set_focus(bot_field)
+bot_row = urwid.Columns([
+  (14, bot_input),
+  ('weight', 64, bot_output)
+])
+
+
+
+
+# bot_field = urwid.AttrMap('normal', bot_field)
+bpile.contents.append((bot_row, ('pack', None)))
+
+bpile.set_focus(bot_row)
 
 #
 # Fake 80/25 display
@@ -190,7 +300,8 @@ bpile.set_focus(bot_field)
 outline = urwid.LineBox(pile, title=u'МЕХАНИЧЕН ДИЗАЙН И КОНСТРУКЦИИ ООД')
 outline = urwid.AttrMap(outline, 'outline')
 
-sichko = urwid.Overlay(outline, urwid.SolidFill(u'\N{MEDIUM SHADE}'),
+sichko = outline
+emulator = urwid.Overlay(outline, urwid.SolidFill(u'\N{MEDIUM SHADE}'),
     width=80,
     height=25,
     # width=180,
@@ -207,18 +318,73 @@ sichko = urwid.Overlay(outline, urwid.SolidFill(u'\N{MEDIUM SHADE}'),
 #     else:
 #         widget.set_attr_map({None: 'error'})
 
-global current_operation
-current_operation = None
+global etag_output
+global etag_input
+etag_output = None
+etag_input = None
 
-def clear_output(loop, operation):
-    global current_operation
-    if operation is current_operation:
+def clear_output(loop, etag):
+    global etag_output
+    global etag_input
+
+    # It is our input, safe to clear
+    if etag_input is etag:
         input_field.base_widget.set_text('')
-        input_field.set_attr_map({None: 'normal '})
+        input_field.set_attr_map({None: 'normal'})
+
+    # It is our output, safe to clear
+    if etag_output is etag:
+        output_field.base_widget.set_text('')
+        output_field.set_attr_map({None: 'normal'})
+
+
+def normalize_message(message):
+    res = ' '.join(message.split())   # squish
+    if len(res) > 62:
+      res = res[0:59] + '...'         # truncate
+
+    return res
+
+def build_message(result, data):
+    if result == 'normal':      msg = 'ОК: %s' % str(data)
+    elif result == 'invalid':   msg = 'НЕВАЛИДЕН БАРКОД'
+    elif result == 'reserved':  msg = 'РЕЗЕРВИРАН БАРКОД'
+    elif result == 'configure': msg = 'СПЕЦИАЛЕН БАРКОД'
+    else:                       msg = 'ГРЕШКА: %s' % str(data)
+
+    return msg
+
+def set_attr_map(loop, (widget, mapping)):
+    widget.set_attr_map(mapping)
+
+
+def update_values(ident):
+    target = None
+
+    if ident == 'terminal':
+        original_style = 'dark_gray_on_black'
+        target = terminal_widget
+        new_value = "ТЕРМИНАЛ:%s" % processor.tid
+    elif ident == 'operation':
+        original_style = 'yellow_on_black'
+        target = operation_widget
+        new_value = "ОПЕРАЦИЯ:%s %s" % (processor.oid, processor.operation)
+    elif ident == 'worker':
+        original_style = 'light_red_on_black'
+        target = worker_widget
+        new_value = "РАБОТНИК:%s %s" % (processor.wid, processor.worker)
+    else:
+        return
+
+    target.base_widget.set_text(new_value)
+
+    main_loop.set_alarm_in(0, set_attr_map, (target, {None: 'yellow_on_blue'}))
+    main_loop.set_alarm_in(1, set_attr_map, (target, {None: original_style}))
 
 
 def process_barcode(barcode):
-    time.sleep(1)
+    return processor.process(barcode)
+
 
 def on_input(key):
     if key == 'enter':
@@ -229,15 +395,19 @@ def on_input(key):
         invalid_input(key)
 
 def valid_input(key):
-    global current_operation
+    global etag_input
+    global etag_output
     current_text = input_field.base_widget.get_text()[0]
 
-    if current_operation:
-        current_operation = None
+    # New operation
+    if etag_output is etag_input:
         current_text = ''
+        etag_input = time.time()
+
+    if len(current_text) >= 12: return
 
     input_field.base_widget.set_text(current_text + key)
-    input_field.set_attr_map({None: 'pending'})
+    input_field.set_attr_map({None: 'in_progress'})
 
 
 def invalid_input(key):
@@ -246,24 +416,29 @@ def invalid_input(key):
 
 
 def submit():
-    global current_operation
+    global etag_input
+    global etag_output
+    global out_delay
+
+    etag_output = etag_input
 
     current_text = input_field.base_widget.get_text()[0]
-    current_operation = time.time()
     input_field.set_attr_map({None: 'processing'})
     main_loop.draw_screen()
-    res = process_barcode(current_text)
+    (result, data) = process_barcode(current_text)
 
-    if res == 0:
-        style = 'success'
-    elif res == 63:
-        style = 'warning'
-    else:
-        style = 'error'
+    message = build_message(result, data)
 
-    input_field.set_attr_map({None: style})
-    main_loop.set_alarm_in(3, clear_output, current_operation)
+    if result == 'configure':
+        update_values(data[0])
 
+    output_field.base_widget.set_text(normalize_message(message))
+
+    styles = PROCESSING_STYLES.get(result, PROCESSING_STYLES.get('other'))
+
+    input_field.set_attr_map({None: styles[0]})
+    output_field.set_attr_map({None: styles[1]})
+    main_loop.set_alarm_in(out_delay, clear_output, etag_output)
 
 
 def update_clock(loop, (period, date_widget, time_widget)):
@@ -273,14 +448,28 @@ def update_clock(loop, (period, date_widget, time_widget)):
 
     loop.set_alarm_in(period, update_clock, (period, date_widget, time_widget))
 
+def update_message(loop, (period, msg_widget, last_modified)):
+    now_modified = os.stat(msg_file).st_mtime
+    if now_modified > last_modified:
+        with open(msg_file, 'rU') as f:
+            text = f.read()
 
-# urwid.connect_signal(input_field.base_widget, 'change', on_input_field_change, input_field)
+        msg_widget.base_widget.set_text(text)
 
-main_loop = urwid.MainLoop(sichko, palette, unhandled_input=on_input)
+    loop.set_alarm_in(period, update_message, (period, msg_widget, now_modified))
 
-period = 0.5
-main_loop.set_alarm_in(period, update_clock, (period, date_widget, time_widget))
-# pdb.set_trace()
+#
+# INIT
+#
+main_loop = urwid.MainLoop(emulator, palette, unhandled_input=on_input)
+
+main_loop.set_alarm_in(2, update_clock, (0.5, date_widget, time_widget))
+main_loop.set_alarm_in(3, update_message, (msg_refresh, msg_widget, 0))
+
+for i in ['terminal', 'operation', 'worker']:
+    update_values(i)
+
+
 
 main_loop.run()
 

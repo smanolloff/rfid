@@ -1,0 +1,1 @@
+from barcode_processor import BarcodeProcessor
