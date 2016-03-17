@@ -263,6 +263,7 @@ div = urwid.AttrMap(div, 'div')
 blankdiv = urwid.Divider(u' ')
 bpile = urwid.Pile([])
 pile = urwid.AttrMap(bpile, 'body')
+msg_header = urwid.Padding(text('...', 'dark_gray_on_black'))
 msg_container = urwid.Padding(msg_widget, left=1, right=1)
 
 # pile.contents.append((urwid.Padding(div, left=20, right=20), ('pack', None)))
@@ -273,6 +274,7 @@ bpile.contents.append((top_line2, ('pack', None)))
 bpile.contents.append((div, ('pack', None)))
 bpile.contents.append((mid_table, ('pack', None)))
 bpile.contents.append((div, ('pack', None)))
+bpile.contents.append((msg_header, ('pack', None)))
 bpile.contents.append((msg_container, ('weight', 1)))
 bpile.contents.append((div, ('pack', None)))
 # bpile.contents.append((input_field, ('pack', None)))
@@ -455,6 +457,8 @@ def update_message(loop, (period, msg_widget, last_modified)):
             with open(msg_file, 'rU') as f:
                 text = f.read()
 
+            ts = time.strftime('%d.%m.%Y %H:%M:%S', time.localtime(now_modified))
+            msg_header.base_widget.set_text('СОБЩЕНИЕ ОТ %s' % ts)
             msg_widget.base_widget.set_text(text)
     except IOError, OSError:
         now_modified = last_modified
