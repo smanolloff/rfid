@@ -460,9 +460,10 @@ def update_message(loop, (period, msg_widget, last_modified)):
             ts = time.strftime('%d.%m.%Y %H:%M:%S', time.localtime(now_modified))
             msg_header.base_widget.set_text('СОБЩЕНИЕ ОТ %s' % ts)
             msg_widget.base_widget.set_text(text)
-    except IOError, OSError:
+    except (IOError, OSError):
         now_modified = last_modified
         msg_widget.base_widget.set_text('X')
+        msg_header.base_widget.set_text('Грешка при зареждане на съобщенията')
 
     loop.set_alarm_in(period, update_message, (period, msg_widget, now_modified))
 

@@ -59,7 +59,7 @@ remount_disk() {
 }
 
 while true; do
-  echo -n 'RFID starting'
+  echo -n 'Application starting'
 
   if ! read_config; then
     echo "ERROR: Could not read config from $CONFIG"
