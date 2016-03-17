@@ -1,5 +1,6 @@
 import ConfigParser
 from backend import BarcodeProcessor
+# TODO: syslog
 
 def main():
     master_config = ConfigParser.ConfigParser()

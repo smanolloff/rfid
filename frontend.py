@@ -17,6 +17,13 @@ out_delay = float(master_config.get('timers', 'barcode_status'))
 msg_refresh = float(master_config.get('timers', 'message_refresh'))
 msg_file = processor.subconf_path('message')
 
+MESSAGES = {
+  'normal': master_config.get('wording', 'barcode_normal'),
+  'invalid': master_config.get('wording', 'barcode_invalid'),
+  'reserved': master_config.get('wording', 'barcode_reserved'),
+  'configure': master_config.get('wording', 'barcode_configure')
+}
+
 # 16 Standard Foreground Colors
 #
 # 'black'
@@ -129,18 +136,12 @@ def text(txt, style=None, align='center'):
     return txt
 
 ##############################################################################
-# HEADER                                                                     #
-##############################################################################
-header = urwid.Text(u'МЕХАНИЧЕН ДИЗАЙН И КОНСТРУКЦИИ ООД', align='center')
-
-
-##############################################################################
 # TOP                                                                        #
 ##############################################################################
 now = time.localtime()
 date_widget = text('...', 'magenta_on_black')
 time_widget = text('...', 'magenta_on_black')
-title_widget = text(u'СИСТЕМА ЗА УПРАВЛЕНИЕ НА ПРОИЗВОДСТВОТО - КОМАНДИР.НЕТ', 'b_white_on_black')
+title_widget = text(master_config.get('wording', 'title'), 'b_white_on_black')
 
 terminal_widget = text(u'...', 'red_on_black')
 operation_widget = text(u'...', 'yellow_on_black')
@@ -296,13 +297,15 @@ bpile.contents.append((bot_row, ('pack', None)))
 
 bpile.set_focus(bot_row)
 
+outline = urwid.LineBox(pile, title=master_config.get('wording', 'head'))
+outline = urwid.AttrMap(outline, 'outline')
+sichko = outline
+
+
 #
 # Fake 80/25 display
 #
-outline = urwid.LineBox(pile, title=u'МЕХАНИЧЕН ДИЗАЙН И КОНСТРУКЦИИ ООД')
-outline = urwid.AttrMap(outline, 'outline')
 
-sichko = outline
 emulator = urwid.Overlay(outline, urwid.SolidFill(u'\N{MEDIUM SHADE}'),
     width=80,
     height=25,
@@ -348,13 +351,7 @@ def normalize_message(message):
     return res
 
 def build_message(result, data):
-    if result == 'normal':      msg = 'ОК'
-    elif result == 'invalid':   msg = 'НЕВАЛИДЕН БАРКОД'
-    elif result == 'reserved':  msg = 'РЕЗЕРВИРАН БАРКОД'
-    elif result == 'configure': msg = 'СПЕЦИАЛЕН БАРКОД'
-    else:                       msg = 'ГРЕШКА: %s' % str(data)
-
-    return msg
+    return MESSAGES.get(result, 'ГРЕШКА: %s' % str(data))
 
 def set_attr_map(loop, (widget, mapping)):
     widget.set_attr_map(mapping)
@@ -458,7 +455,7 @@ def update_message(loop, (period, msg_widget, last_modified)):
                 text = f.read()
 
             ts = time.strftime('%d.%m.%Y %H:%M:%S', time.localtime(now_modified))
-            msg_header.base_widget.set_text('СОБЩЕНИЕ ОТ %s' % ts)
+            msg_header.base_widget.set_text('Съобщение от %s' % ts)
             msg_widget.base_widget.set_text(text)
     except (IOError, OSError):
         now_modified = last_modified
