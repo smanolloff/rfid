@@ -143,9 +143,9 @@ date_widget = text('...', 'magenta_on_black')
 time_widget = text('...', 'magenta_on_black')
 title_widget = text(master_config.get('wording', 'title'), 'b_white_on_black')
 
-terminal_widget = text(u'...', 'red_on_black')
-operation_widget = text(u'...', 'yellow_on_black')
-worker_widget = text(u'...', 'red_on_black')
+terminal_widget = text('...', 'red_on_black')
+operation_widget = text('...', 'yellow_on_black')
+worker_widget = text('...', 'red_on_black')
 
 top_line1 = urwid.Columns([
   ('weight', 12, date_widget),
@@ -356,8 +356,11 @@ def build_message(result, data):
 def set_attr_map(loop, (widget, mapping)):
     widget.set_attr_map(mapping)
 
+def update_values(loop):
+    for i in ['terminal', 'operation', 'worker']:
+        update_value(loop, i)
 
-def update_values(ident):
+def update_value(loop, ident):
     target = None
 
     if ident == 'terminal':
@@ -375,10 +378,13 @@ def update_values(ident):
     else:
         return
 
-    target.base_widget.set_text(new_value.strip())
+    old_value = target.base_widget.get_text()[0].strip()
+    new_value = new_value.strip()
 
-    main_loop.set_alarm_in(0, set_attr_map, (target, {None: 'yellow_on_blue'}))
-    main_loop.set_alarm_in(1, set_attr_map, (target, {None: original_style}))
+    if new_value != old_value:
+        target.base_widget.set_text(new_value.strip())
+        set_attr_map(None, (target, {None: 'yellow_on_blue'}))
+        loop.set_alarm_in(1, set_attr_map, (target, {None: original_style}))
 
 
 def process_barcode(barcode):
@@ -406,7 +412,7 @@ def valid_input(key):
     if len(current_text) >= 12: return
 
     input_field.base_widget.set_text(current_text + key)
-    input_field.set_attr_map({None: 'in_progress'})
+    input_field.set_attr_map({None: 'normal'})
 
 
 def invalid_input(key):
@@ -422,14 +428,11 @@ def submit():
     etag_output = etag_input
 
     current_text = input_field.base_widget.get_text()[0]
-    input_field.set_attr_map({None: 'processing'})
-    main_loop.draw_screen()
     (result, data) = process_barcode(current_text)
 
     message = build_message(result, data)
 
-    if result == 'configure':
-        update_values(data[0])
+    update_values(main_loop)
 
     output_field.base_widget.set_text(normalize_message(message))
 
@@ -444,7 +447,6 @@ def update_clock(loop, (period, date_widget, time_widget)):
     now = time.localtime()
     date_widget.base_widget.set_text(time.strftime('%d.%m.%Y', now))
     time_widget.base_widget.set_text(time.strftime('%H:%M:%S', now))
-
     loop.set_alarm_in(period, update_clock, (period, date_widget, time_widget))
 
 def update_message(loop, (period, msg_widget, last_modified)):
@@ -467,15 +469,11 @@ def update_message(loop, (period, msg_widget, last_modified)):
 #
 # INIT
 #
-main_loop = urwid.MainLoop(emulator, palette, unhandled_input=on_input)
+main_loop = urwid.MainLoop(sichko, palette, unhandled_input=on_input)
 
 main_loop.set_alarm_in(2, update_clock, (0.5, date_widget, time_widget))
 main_loop.set_alarm_in(3, update_message, (msg_refresh, msg_widget, 0))
-
-for i in ['terminal', 'operation', 'worker']:
-    update_values(i)
-
-
+update_values(main_loop)
 
 main_loop.run()
 
