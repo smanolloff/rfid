@@ -7,16 +7,14 @@ import pdb
 class BarcodeProcessor:
     def __init__(self, master_config):
         self._master_config = master_config
-        self.output_rot = master_config.get('output', 'rotation')
         self.output_ext = master_config.get('output', 'extension')
         self.output_dir = master_config.get('output', 'directory')
         self._config_dir = master_config.get('general', 'mountpoint')
 
         self.map_config_file = self.subconf_path('mapping')
         self.general_config_file = self.subconf_path('general')
-        self.alt_config_file = self.subconf_path('operation')
         self._file_timestamp = time.localtime()
-        self._read_config()
+        self.read_config()
 
     def subconf_path(self, subconf):
       return os.path.join(
@@ -35,15 +33,16 @@ class BarcodeProcessor:
             return self._process_reserved_input(barcode)
 
     def _process_regular_input(self, barcode):
-        self._read_config()
+        self.read_config()
         self._timestamp = time.localtime()
-        line = self._build_line(barcode)
+        oid = self._extract_oid(barcode)
+        line = self._build_line(barcode, oid)
         file = self._build_filename()
 
         with open(file, 'a') as f:
             f.write(line)
 
-        return ('normal', line)
+        return ('normal', oid)
 
     def _process_invalid_input(self, barcode):
         return ('invalid', barcode)
@@ -52,7 +51,7 @@ class BarcodeProcessor:
         return ('reserved', barcode)
 
     def _process_special_input(self, barcode):
-        self._read_config()
+        self.read_config()
         if barcode[0] == '7':
             new_value = ('terminal', barcode[-3:])
         elif barcode[0] == '8':
@@ -65,7 +64,7 @@ class BarcodeProcessor:
             self.general_config.write(f)
 
 
-        self._read_config() # update with written values
+        self.read_config() # update with written values
         return ('configure', new_value)
 
     def _validate_barcode(self, barcode):
@@ -73,20 +72,21 @@ class BarcodeProcessor:
         match_data = re.match(pattern, barcode)
         return re.match(pattern, barcode)
 
-    def _read_config(self):
+    def _extract_oid(self, barcode):
+        oid = barcode[1:3]
+        if oid == '00': oid = self.oid  # use operation_id from config file
+        return oid
+
+    def read_config(self):
         self.map_config = ConfigParser.ConfigParser()
         self.map_config.read(self.map_config_file)
 
         self.general_config = ConfigParser.ConfigParser()
         self.general_config.read(self.general_config_file)
 
-        self.alt_config = ConfigParser.ConfigParser()
-        self.alt_config.read(self.alt_config_file)
-
         self.tid = self.general_config.get('ids', 'terminal')
         self.oid = self.general_config.get('ids', 'operation')
         self.wid = self.general_config.get('ids', 'worker')
-        self.alt_oid = self.alt_config.get('ids', 'operation')
 
         try:
             self.worker = self.map_config.get('workers', str(self.wid))
@@ -114,12 +114,7 @@ class BarcodeProcessor:
 
         return fullname
 
-    def _build_line(self, barcode):
-        if barcode[1:3] == '00':
-            oid = self.alt_oid      # use operation_id from CONFIG08.TXT
-        else:
-            oid = self.oid          # use operation_id from CONFIG.TXT
-
+    def _build_line(self, barcode, oid):
         fields = [
             barcode,
             self.tid,
