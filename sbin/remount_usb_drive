@@ -1,0 +1,88 @@
+#!/bin/bash -e
+
+USER=$(whoami)
+DIR=$(dirname $0)
+DISK=$1
+MOUNTPOINT=$2
+ERROR=false
+
+if [ "$USER" != root ]; then
+  echo "Must be ran as root" >&2
+  exit 1
+fi
+
+if [ -z "$DISK" ]; then
+  echo "No disk given" >&2
+  ERROR=true
+fi
+
+if [ -z "$MOUNTPOINT" ]; then
+  echo "No mountpoint given" >&2
+  ERROR=true
+fi
+
+if $ERROR; then
+  echo "Usage: $(basename $0) DISK MOUNTPOINT" >&2
+  exit 1
+fi
+
+
+dotsleep() {
+  local i=$1
+  while let i--; do
+    echo -n .
+    sleep 1
+  done
+}
+
+reset_usb() {
+  local port
+  local dev
+
+  port=$(lsusb -t | grep usb-storage | grep -Eo 'Port [0-9]+' | awk '{print $2}')
+
+  if [ -z "$port" ]; then
+    echo 'WARNING: Could not identify "usb-storage"' >&2
+  else
+    # Assume root hub is always enumerated at Bus1-Port1
+    dev=/sys/bus/usb/devices/1-1.$port/authorized
+
+    # echo "Re-authorizing USB dev at $dev"
+
+    echo "De-authorizing USB device"
+    echo 0 > $dev
+    dotsleep 1
+
+    echo "Authorizing USB device"
+    echo 1 > $dev
+    dotsleep 1
+  fi
+}
+
+unmount_disk() {
+  echo "Unmounting disk"
+  umount $DISK $MOUNTPOINT 2>/dev/null
+}
+
+mount_disk() {
+  echo "Mounting disk"
+  mount $DISK $MOUNTPOINT -t vfat -o auto,rw,user,umask=000 && dotsleep 3
+}
+
+stop_samba() {
+  service samba stop
+  dotsleep 1
+}
+
+start_samba() {
+  service samba start
+  dotsleep 1
+}
+
+set -e
+
+stop_samba   && dotsleep 3 || :
+unmount_disk && dotsleep 3 || :
+reset_usb    && dotsleep 3
+mount_disk   && dotsleep 3
+start_samba  && dotsleep 3
